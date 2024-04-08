@@ -12,7 +12,7 @@ RUN wget https://github.com/jgm/pandoc/releases/download/3.1.12.3/pandoc-3.1.12.
     && dpkg -i pandoc-3.1.12.3-amd64.deb \
     && rm pandoc-3.1.12.3-amd64.deb
 
-RUN cd /tmp \\
+RUN cd /tmp \
     && wget https://github.com/lierdakil/pandoc-crossref/releases/download/v0.3.17.0f/pandoc-crossref-Linux.tar.xz \
     && tar -xf pandoc-crossref-Linux.tar.xz \
     && sudo mv pandoc-crossref /usr/local/bin/ \
