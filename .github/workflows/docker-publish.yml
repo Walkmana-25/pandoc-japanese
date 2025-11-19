@@ -19,23 +19,28 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
       id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Set image name to lowercase
         run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Log into registry ${{ env.REGISTRY }}
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -43,13 +48,12 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract Docker metadata for build
         id: meta-build
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: |
+          flavor:
             suffix=-${{ matrix.arch }}
           tags: |
             type=schedule
@@ -59,7 +63,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
-
       - name: Build and push arch-specific image
         uses: docker/build-push-action@v5
         with:
@@ -79,23 +82,19 @@ jobs:
       contents: read
       packages: write
       id-token: write
-
     steps:
       - name: Set image name to lowercase
         run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
       - name: Install cosign
         uses: sigstore/cosign-installer@v3.1.1
         with:
           cosign-release: 'v2.1.1'
-
       - name: Log into registry ${{ env.REGISTRY }}
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract Docker metadata for merge
         id: meta-merge
         uses: docker/metadata-action@v5
@@ -108,22 +107,18 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
-
       - name: Create, push, and sign manifest lists
         run: |
           tags=$(echo '${{ steps.meta-merge.outputs.tags }}' | tr ',' '\n')
           for tag in $tags; do
             echo "Processing tag: $tag"
-
             echo "--> Creating and pushing manifest for $tag"
             docker buildx imagetools create -t "$tag" "$tag-amd64" "$tag-arm64"
-
             digest=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest.Digest}}' | tr -d '"')
             if [ -z "$digest" ]; then
               echo "::error::Could not get digest for tag $tag"
               exit 1
             fi
-
             echo "--> Signing manifest for $tag with digest $digest"
             cosign sign --yes "$tag@$digest"
           done
